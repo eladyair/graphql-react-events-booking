@@ -1,6 +1,10 @@
 const express = require('express');
 const graphqlHttp = require('express-graphql');
 const { buildSchema } = require('graphql');
+const mongoose = require('mongoose');
+
+// Models
+const Event = require('./models/event');
 
 const app = express();
 
@@ -51,26 +55,54 @@ app.use(
     `),
         rootValue: {
             events: () => {
-                return events;
+                return Event.find()
+                    .then(events => {
+                        return events.map(event => {
+                            //return { ...event._doc, _id: event._doc._id.toString() }; // OR
+                            return { ...event._doc, _id: event.id }; // The same as above, only simpler. mongoose gives this option
+                        });
+                    })
+                    .catch(err => {
+                        console.log(err);
+                        throw err;
+                    });
             },
             createEvent: args => {
-                const event = {
-                    _id: Math.random().toString(),
+                const event = new Event({
                     title: args.eventInput.title,
                     description: args.eventInput.description,
                     price: +args.eventInput.price,
-                    date: args.eventInput.date
-                };
+                    date: new Date(args.eventInput.date)
+                });
 
-                events.push(event);
-
-                return event;
+                return event
+                    .save()
+                    .then(event => {
+                        return { ...event._doc, _id: event.id }; // Returning the core data of the event without the rest of the metadata
+                    })
+                    .catch(err => {
+                        console.log(err);
+                        throw err;
+                    });
             }
         },
         graphiql: true
     })
 );
 
-app.listen(3001, () => {
-    console.log('Server is running');
-});
+mongoose
+    .connect(
+        `mongodb+srv://${process.env.MONGO_USER}:${process.env.MONGO_PASSWORD}@eventsbooking-2sp0f.mongodb.net/${process.env.MONGO_DB}?retryWrites=true&w=majority`,
+        {
+            useNewUrlParser: true,
+            useUnifiedTopology: true
+        }
+    )
+    .then(() => {
+        console.log('Connected To Mongo!');
+
+        app.listen(3001, () => {
+            console.log('Server is running');
+        });
+    })
+    .catch(err => console.log(err));
